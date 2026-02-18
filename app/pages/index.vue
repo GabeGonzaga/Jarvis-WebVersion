@@ -107,8 +107,8 @@ const quickButtons = ref<QuickButton[]>([
   { key: '1', label: 'YOUTUBE', href: 'https://youtube.com', action: 'link' },
   { key: '2', label: 'GITHUB', href: 'https://github.com', action: 'link' },
   { key: '3', label: 'DOCS', href: 'https://nuxt.com', action: 'link' },
-  { key: '4', label: 'STATUS', action: 'noop' },
-  { key: '5', label: 'CONFIG', action: 'noop' },
+  { key: '4', label: 'MOODLE', href: 'https://moodle25.iscte-iul.pt/my/courses.php', action: 'link' },
+  { key: '5', label: 'OKTA', href: 'https://login.iscte-iul.pt/app/UserHome', action: 'link' },
 ])
 
 const handleQuick = (b: QuickButton) => {
