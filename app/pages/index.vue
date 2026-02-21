@@ -199,7 +199,7 @@ interface Message {
 type QuickButton = { key: '1'|'2'|'3'|'4'|'5'; label: string; href?: string; action?: 'link'|'noop' }
 type VoiceState = 'idle' | 'listening' | 'pending' | 'processing'
 
-// ── Chat ───────────────────────────────────────────────────
+// ── Chat state ─────────────────────────────────────────────
 const quickButtons = ref<QuickButton[]>([
   { key: '1', label: 'YOUTUBE',  href: 'https://youtube.com', action: 'link' },
   { key: '2', label: 'GITHUB',   href: 'https://github.com', action: 'link' },
@@ -214,13 +214,20 @@ const statusOnline   = ref(false)
 const messagesContainer = ref<HTMLElement | null>(null)
 let messageId = 1
 
-// ── Voice ──────────────────────────────────────────────────
-const voiceState       = ref<VoiceState>('idle')
-const liveTranscript   = ref('')   // shown in ghost bubble while speaking
-const pendingTranscript = ref('')  // editable in 20s window
+// ── Voice state ────────────────────────────────────────────
+const voiceState        = ref<VoiceState>('idle')
+const liveTranscript    = ref('')
+const pendingTranscript = ref('')
 const pendingCountdown  = ref(20)
 
-const micLabel = computed(() => ({ idle:'Click to speak', listening:'Click to stop', pending:'Click to cancel', processing:'Processing…' }[voiceState.value]))
+const micLabel = computed(() => ({
+  idle: 'Click to speak', listening: 'Click to stop',
+  pending: 'Click to cancel', processing: 'Processing…'
+}[voiceState.value]))
+
+// WS base — direct to daphne on :8000
+// Direct to daphne — ssr:false guarantees window exists, no Nitro proxy needed
+const WS_BASE = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.hostname}:8000`
 
 let voiceWs: WebSocket | null = null
 let mediaRecorder: MediaRecorder | null = null
@@ -232,18 +239,14 @@ let vadInterval: number | null = null
 let silenceStart: number | null = null
 let countdownInterval: number | null = null
 
-const SILENCE_THRESHOLD = 0.012  // RMS — tune lower if quiet mic
-const SILENCE_MS        = 2000   // 2s silence → stop
-const PENDING_SECONDS   = 20     // edit window
-
-// ── Camera ─────────────────────────────────────────────────
+// ── Camera state ───────────────────────────────────────────
 const showCamera  = ref(false)
 const videoEl     = ref<HTMLVideoElement | null>(null)
 const canvasEl    = ref<HTMLCanvasElement | null>(null)
 const lastGesture = ref<{ name: string; action?: string } | null>(null)
-let visionWs: WebSocket | null = null
 let cameraStream: MediaStream | null = null
 let frameLoop: number | null = null
+let visionWs: WebSocket | null = null
 let gestureClearTimer: ReturnType<typeof setTimeout> | null = null
 
 // ── Lifecycle ──────────────────────────────────────────────
@@ -253,9 +256,9 @@ onMounted(async () => {
 })
 onUnmounted(() => {
   _cleanupMic()
-  if (frameLoop) clearInterval(frameLoop)
-  cameraStream?.getTracks().forEach(t => t.stop())
-  voiceWs?.close(); visionWs?.close()
+  _closeCamera()
+  voiceWs?.close()
+  visionWs?.close()
 })
 
 // ── Helpers ────────────────────────────────────────────────
@@ -263,8 +266,11 @@ const scrollBottom = async () => {
   await nextTick()
   if (messagesContainer.value) messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
 }
-const formatTime = (d: Date) => new Intl.DateTimeFormat('en-US', { hour:'2-digit', minute:'2-digit', hour12:false }).format(d)
-const handleQuick = (b: QuickButton) => { if (b.action === 'link' && b.href) window.open(b.href, '_blank', 'noopener,noreferrer') }
+const formatTime = (d: Date) =>
+  new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }).format(d)
+const handleQuick = (b: QuickButton) => {
+  if (b.action === 'link' && b.href) window.open(b.href, '_blank', 'noopener,noreferrer')
+}
 
 // ── Text chat ──────────────────────────────────────────────
 const handleSendMessage = async () => {
@@ -280,24 +286,24 @@ async function _sendToJarvis(text: string, via: 'text'|'voice') {
     const res = await sendMessage(text)
     messages.value.push({ id: messageId++, sender: 'jarvis', text: res.response, timestamp: new Date(res.timestamp), via })
   } catch {
-    messages.value.push({ id: messageId++, sender: 'jarvis', text: 'Backend not connected. Start Django on :8000.', timestamp: new Date() })
+    messages.value.push({ id: messageId++, sender: 'jarvis', text: 'Backend not connected.', timestamp: new Date() })
   } finally { isTyping.value = false; await scrollBottom() }
 }
 
 // ── Voice WebSocket ────────────────────────────────────────
 function _getVoiceWs(): WebSocket {
   if (voiceWs && voiceWs.readyState === WebSocket.OPEN) return voiceWs
-  const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-  voiceWs = new WebSocket(`${proto}://${location.host}/ws/voice/`)
+  voiceWs = new WebSocket(`${WS_BASE}/ws/voice/`)
   voiceWs.onmessage = ev => { try { _onVoiceMsg(JSON.parse(ev.data)) } catch {} }
-  voiceWs.onclose = () => { voiceWs = null }
+  voiceWs.onclose  = () => { voiceWs = null }
+  voiceWs.onerror  = () => { console.error('[VoiceWS] Cannot connect — is daphne running?') }
   return voiceWs
 }
 function _onVoiceMsg(msg: Record<string, unknown>) {
   if (msg.type === 'transcript' && msg.text)
-    liveTranscript.value = msg.text as string           // partial/live update ghost bubble
-  if (msg.type === 'transcript_ready' && msg.text)
-    pendingTranscript.value = msg.text as string        // backend confirms full transcript
+    liveTranscript.value = msg.text as string
+  if (msg.type === 'transcript_ready')
+    pendingTranscript.value = (msg.text as string) || pendingTranscript.value
   if (msg.type === 'jarvis_reply') {
     messages.value.push({ id: messageId++, sender: 'jarvis', text: msg.text as string, timestamp: new Date(), via: 'voice' })
     voiceState.value = 'idle'; liveTranscript.value = ''; pendingTranscript.value = ''
@@ -305,97 +311,134 @@ function _onVoiceMsg(msg: Record<string, unknown>) {
   }
 }
 
-// ── Mic toggle: click ON → click OFF ──────────────────────
+// ── Mic toggle ────────────────────────────────────────────
 async function toggleMic() {
   if (voiceState.value === 'listening')  { _stopRecording(); return }
   if (voiceState.value === 'pending')    { cancelPending(); return }
   if (voiceState.value === 'processing') return
 
   try {
-    micStream   = await navigator.mediaDevices.getUserMedia({ audio: true, video: false })
-    audioCtx    = new AudioContext({ sampleRate: 16000 })
-    const src   = audioCtx.createMediaStreamSource(micStream)
-    analyser    = audioCtx.createAnalyser(); analyser.fftSize = 512
+    // Enumerate devices to prefer MacBook built-in mic, not iPhone/AirPods
+    const devices = await navigator.mediaDevices.enumerateDevices()
+    const mics = devices.filter(d => d.kind === 'audioinput')
+    // Prefer built-in mic (avoid iPhone/Bluetooth/AirPods)
+    const builtIn = mics.find(d =>
+      /built.?in|internal|macbook|default/i.test(d.label) &&
+      !/iphone|airpod|bluetooth|external/i.test(d.label)
+    )
+    if (builtIn) console.log('[Mic] Using:', builtIn.label)
+    else console.warn('[Mic] Built-in not found, using default. Check System Settings → Sound → Input')
+    const audioConstraints: MediaTrackConstraints = builtIn
+      ? { deviceId: { exact: builtIn.deviceId }, echoCancellation: true, noiseSuppression: true, sampleRate: 16000 }
+      : { echoCancellation: true, noiseSuppression: true, sampleRate: 16000 }
+    micStream     = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints, video: false })
+    audioCtx      = new AudioContext({ sampleRate: 16000 })
+    const src     = audioCtx.createMediaStreamSource(micStream)
+    analyser      = audioCtx.createAnalyser(); analyser.fftSize = 2048
     src.connect(analyser)
-
     audioChunks   = []
-    mediaRecorder = new MediaRecorder(micStream, { mimeType: 'audio/webm;codecs=opus' })
+    mediaRecorder = new MediaRecorder(micStream)
     mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data) }
-    mediaRecorder.start(100)
-    voiceState.value    = 'listening'
+    mediaRecorder.start()  // no timeslice — produces one complete valid webm blob
+    voiceState.value     = 'listening'
     liveTranscript.value = ''
-
-    const ws = _getVoiceWs()
-    const go = () => ws.send(JSON.stringify({ type: 'start_listening' }))
-    ws.readyState === WebSocket.OPEN ? go() : (ws.onopen = go)
-
     _startVAD()
-  } catch (e) { console.error('[Voice] Mic denied', e) }
-}
-
-// ── VAD: silence detection ─────────────────────────────────
-function _startVAD() {
-  if (!analyser) return
-  const buf = new Float32Array(analyser.fftSize); silenceStart = null
-  vadInterval = window.setInterval(() => {
-    if (!analyser || voiceState.value !== 'listening') { clearInterval(vadInterval!); vadInterval = null; return }
-    analyser.getFloatTimeDomainData(buf)
-    const rms = Math.sqrt(buf.reduce((s, v) => s + v * v, 0) / buf.length)
-    if (rms < SILENCE_THRESHOLD) {
-      if (silenceStart === null) silenceStart = Date.now()
-      else if (Date.now() - silenceStart > SILENCE_MS) _stopRecording()
-    } else { silenceStart = null }
-  }, 80)
-}
-
-// ── Stop recording → enter 20s edit window ────────────────
-function _stopRecording() {
-  if (vadInterval !== null) { clearInterval(vadInterval); vadInterval = null }
-  if (!mediaRecorder || mediaRecorder.state === 'inactive') return
-  mediaRecorder.stop()
-  micStream?.getTracks().forEach(t => t.stop())
-  mediaRecorder.onstop = async () => {
-    if (audioChunks.length === 0) { voiceState.value = 'idle'; return }
-    const blob = new Blob(audioChunks, { type: 'audio/webm' }); audioChunks = []
-    try {
-      const buf     = await blob.arrayBuffer()
-      const decoded = await audioCtx!.decodeAudioData(buf)
-      const pcm     = decoded.getChannelData(0)
-      const bytes   = new Uint8Array(pcm.buffer)
-      const ws      = _getVoiceWs(); const CHUNK = 32768
-      for (let i = 0; i < bytes.length; i += CHUNK) {
-        const b64 = btoa(String.fromCharCode(...bytes.slice(i, i + CHUNK)))
-        ws.send(JSON.stringify({ type: 'audio_chunk', data: b64 }))
-      }
-      ws.send(JSON.stringify({ type: 'transcribe_only' }))  // backend returns transcript_ready
-      // Enter pending — prepopulate with whatever live transcript we had
-      pendingTranscript.value = liveTranscript.value || ''
-      voiceState.value = 'pending'
-      _startCountdown(); scrollBottom()
-    } catch (e) { console.error('[Voice] decode error', e); voiceState.value = 'idle' }
+  } catch (e) {
+    console.error('[Mic] Access denied', e)
+    voiceState.value = 'idle'
   }
 }
 
-// ── 20s countdown ─────────────────────────────────────────
+// ── VAD: 3 seconds of silence → auto stop ────────────────
+function _startVAD() {
+  if (!analyser) return
+  const buf = new Float32Array(analyser.frequencyBinCount)
+  silenceStart = null
+  vadInterval = window.setInterval(() => {
+    if (!analyser || voiceState.value !== 'listening') return
+    analyser.getFloatTimeDomainData(buf)
+    const rms = Math.sqrt(buf.reduce((s, v) => s + v * v, 0) / buf.length)
+    if (rms < 0.01) {
+      if (silenceStart === null) silenceStart = Date.now()
+      else if (Date.now() - silenceStart > 3000) _stopRecording()
+    } else {
+      silenceStart = null
+    }
+  }, 100)
+}
+
+// ── Stop recording → send to backend → show editable bubble
+function _stopRecording() {
+  if (vadInterval !== null) { clearInterval(vadInterval); vadInterval = null }
+  if (!mediaRecorder || mediaRecorder.state === 'inactive') return
+
+  mediaRecorder.stop()
+  micStream?.getTracks().forEach(t => t.stop())
+  micStream = null
+
+  mediaRecorder.onstop = async () => {
+    if (audioChunks.length === 0) { voiceState.value = 'idle'; return }
+
+    // Enter pending immediately so user sees something
+    voiceState.value        = 'pending'
+    pendingTranscript.value = '…transcribing'
+    _startCountdown()
+    await scrollBottom()
+
+    // Send audio to backend as base64-encoded webm blob
+    // (btoa+spread crashes on large buffers — use FileReader instead)
+    try {
+      const blob = new Blob(audioChunks, { type: mediaRecorder!.mimeType || 'audio/webm' })
+      audioChunks = []
+
+      const b64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload  = () => resolve((reader.result as string).split(',')[1])
+        reader.onerror = reject
+        reader.readAsDataURL(blob)
+      })
+
+      const ws = _getVoiceWs()
+      const send = () => {
+        // Send in one message — backend handles the full webm blob
+        ws.send(JSON.stringify({ type: 'audio_chunk', data: b64 }))
+        ws.send(JSON.stringify({ type: 'transcribe_only' }))
+      }
+      if (ws.readyState === WebSocket.OPEN) send()
+      else ws.onopen = send
+
+    } catch (e) {
+      console.error('[Voice] Processing error', e)
+      pendingTranscript.value = ''
+      voiceState.value = 'idle'
+    }
+    audioChunks = []
+  }
+}
+
+// ── 20s countdown before auto-send ───────────────────────
 function _startCountdown() {
-  pendingCountdown.value = PENDING_SECONDS
+  pendingCountdown.value = 20
   if (countdownInterval !== null) clearInterval(countdownInterval)
   countdownInterval = window.setInterval(() => {
     pendingCountdown.value--
-    if (pendingCountdown.value <= 0) { clearInterval(countdownInterval!); countdownInterval = null; sendPending() }
+    if (pendingCountdown.value <= 0) {
+      clearInterval(countdownInterval!); countdownInterval = null
+      sendPending()
+    }
   }, 1000)
 }
 
 function sendPending() {
   if (countdownInterval !== null) { clearInterval(countdownInterval); countdownInterval = null }
   const text = pendingTranscript.value.trim()
-  if (!text) { voiceState.value = 'idle'; return }
+  if (!text || text === '…transcribing') { voiceState.value = 'idle'; return }
   voiceState.value = 'processing'
-  // Show in chat immediately
   messages.value.push({ id: messageId++, sender: 'user', text, timestamp: new Date(), via: 'voice' })
   pendingTranscript.value = ''; liveTranscript.value = ''; scrollBottom()
-  // Execute via WS + TTS
-  _getVoiceWs().send(JSON.stringify({ type: 'execute_transcript', text }))
+  const ws = _getVoiceWs()
+  const go = () => ws.send(JSON.stringify({ type: 'execute_transcript', text }))
+  ws.readyState === WebSocket.OPEN ? go() : (ws.onopen = go)
 }
 
 function cancelPending() {
@@ -406,42 +449,85 @@ function cancelPending() {
 function _cleanupMic() {
   if (vadInterval !== null)       { clearInterval(vadInterval);       vadInterval = null }
   if (countdownInterval !== null) { clearInterval(countdownInterval); countdownInterval = null }
-  micStream?.getTracks().forEach(t => t.stop()); micStream = null; mediaRecorder = null; analyser = null
+  micStream?.getTracks().forEach(t => t.stop())
+  micStream = null; mediaRecorder = null; analyser = null
 }
 
-// ── Camera: open / close ───────────────────────────────────
+// ── Camera: purely local — no WS dependency for display ──
 async function toggleCamera() {
-  if (showCamera.value) {
+  if (showCamera.value) { _closeCamera(); return }
+
+  showCamera.value = true
+  await nextTick()
+
+  try {
+    cameraStream = await navigator.mediaDevices.getUserMedia({
+      video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' },
+      audio: false
+    })
+    const video = videoEl.value
+    if (!video) return
+    video.srcObject = cameraStream
+    await video.play()
+
+    // Start frame loop — camera stays open forever until button clicked again
+    frameLoop = window.setInterval(() => {
+      if (canvasEl.value && video.readyState >= 2) {
+        canvasEl.value.width  = video.videoWidth  || 320
+        canvasEl.value.height = video.videoHeight || 240
+      }
+      // Optionally send frames to backend for gesture detection (best-effort, no crash if WS down)
+      _trySendFrame(video)
+    }, 100)
+
+    // Try to connect gesture WS — but camera works even if this fails
+    _connectVisionWs()
+
+  } catch (e) {
+    console.error('[Camera] Access denied', e)
     showCamera.value = false
-    if (frameLoop !== null) { clearInterval(frameLoop); frameLoop = null }
-    cameraStream?.getTracks().forEach(t => t.stop()); cameraStream = null
-    if (videoEl.value)  videoEl.value.srcObject = null
-    if (canvasEl.value) canvasEl.value.getContext('2d')?.clearRect(0, 0, 9999, 9999)
-    visionWs?.send(JSON.stringify({ type: 'stop_tracking' }))
-  } else {
-    showCamera.value = true; await nextTick()
-    try {
-      cameraStream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 }, audio: false })
-      if (videoEl.value) { videoEl.value.srcObject = cameraStream; await videoEl.value.play() }
-      const ws = _getVisionWs()
-      const go = () => ws.send(JSON.stringify({ type: 'start_tracking' }))
-      ws.readyState === WebSocket.OPEN ? go() : (ws.onopen = go)
-      frameLoop = window.setInterval(_captureAndSend, 67)
-    } catch (e) { console.error('[Camera] denied', e); showCamera.value = false }
   }
 }
 
-function _getVisionWs(): WebSocket {
-  if (visionWs && visionWs.readyState === WebSocket.OPEN) return visionWs
-  const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-  visionWs = new WebSocket(`${proto}://${location.host}/ws/vision/`)
-  visionWs.onmessage = ev => { try { _onVisionMsg(JSON.parse(ev.data)) } catch {} }
-  visionWs.onclose = () => { visionWs = null }
-  return visionWs
+function _closeCamera() {
+  showCamera.value = false
+  if (frameLoop !== null) { clearInterval(frameLoop); frameLoop = null }
+  cameraStream?.getTracks().forEach(t => t.stop()); cameraStream = null
+  if (videoEl.value)  videoEl.value.srcObject = null
+  if (canvasEl.value) canvasEl.value.getContext('2d')?.clearRect(0, 0, 9999, 9999)
+  lastGesture.value = null
+  visionWs?.close(); visionWs = null
 }
+
+function _trySendFrame(video: HTMLVideoElement) {
+  // Only send if WS is open and ready — never crash if it's not
+  if (!visionWs || visionWs.readyState !== WebSocket.OPEN) return
+  if (video.readyState < 2) return
+  try {
+    const tmp = document.createElement('canvas')
+    tmp.width = 320; tmp.height = 240
+    tmp.getContext('2d')!.drawImage(video, 0, 0, 320, 240)
+    visionWs.send(JSON.stringify({
+      type: 'frame',
+      data: tmp.toDataURL('image/jpeg', 0.6).split(',')[1],
+      width: 320, height: 240
+    }))
+  } catch { /* ignore */ }
+}
+
+function _connectVisionWs() {
+  if (visionWs && visionWs.readyState <= WebSocket.OPEN) return
+  visionWs = new WebSocket(`${WS_BASE}/ws/vision/`)
+  visionWs.onopen    = () => visionWs!.send(JSON.stringify({ type: 'start_tracking' }))
+  visionWs.onmessage = ev => { try { _onVisionMsg(JSON.parse(ev.data)) } catch {} }
+  // If vision WS fails, camera stays open — just no gesture overlay
+  visionWs.onerror   = () => { visionWs = null }
+  visionWs.onclose   = () => { visionWs = null }
+}
+
 function _onVisionMsg(msg: Record<string, unknown>) {
   if (msg.type === 'landmarks') _drawLandmarks((msg.hands as any[]) || [])
-  if (msg.type === 'gesture') lastGesture.value = { name: msg.name as string }
+  if (msg.type === 'gesture')   lastGesture.value = { name: msg.name as string }
   if (msg.type === 'action_triggered') {
     if (lastGesture.value) lastGesture.value = { ...lastGesture.value, action: msg.action as string }
     if (gestureClearTimer) clearTimeout(gestureClearTimer)
@@ -449,29 +535,38 @@ function _onVisionMsg(msg: Record<string, unknown>) {
   }
 }
 
-const HAND_CONNECTIONS = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]]
+const HAND_CONNECTIONS = [
+  [0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],
+  [5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],
+  [13,17],[17,18],[18,19],[19,20],[0,17]
+]
 
-function _drawLandmarks(hands: { landmarks: { x: number; y: number; z: number }[] }[]) {
-  const canvas = canvasEl.value; const video = videoEl.value; if (!canvas || !video) return
+function _drawLandmarks(hands: { landmarks: { x:number; y:number; z:number }[] }[]) {
+  const canvas = canvasEl.value; const video = videoEl.value
+  if (!canvas || !video) return
   const ctx = canvas.getContext('2d'); if (!ctx) return
   canvas.width = video.videoWidth || 320; canvas.height = video.videoHeight || 240
   ctx.clearRect(0, 0, canvas.width, canvas.height)
   for (const hand of hands) {
     const pts = hand.landmarks; const W = canvas.width; const H = canvas.height
     ctx.strokeStyle = 'rgba(0,212,255,0.7)'; ctx.lineWidth = 1.5
-    for (const [a, b] of HAND_CONNECTIONS) { ctx.beginPath(); ctx.moveTo(pts[a].x*W, pts[a].y*H); ctx.lineTo(pts[b].x*W, pts[b].y*H); ctx.stroke() }
-    for (let i = 0; i < pts.length; i++) { ctx.beginPath(); ctx.arc(pts[i].x*W, pts[i].y*H, i===0?5:3, 0, Math.PI*2); ctx.fillStyle = i===0?'#00d4ff':'rgba(0,212,255,0.85)'; ctx.fill() }
+    for (const [a, b] of HAND_CONNECTIONS) {
+      ctx.beginPath(); ctx.moveTo(pts[a].x*W, pts[a].y*H)
+      ctx.lineTo(pts[b].x*W, pts[b].y*H); ctx.stroke()
+    }
+    for (let i = 0; i < pts.length; i++) {
+      ctx.beginPath(); ctx.arc(pts[i].x*W, pts[i].y*H, i===0?5:3, 0, Math.PI*2)
+      ctx.fillStyle = i===0 ? '#00d4ff' : 'rgba(0,212,255,0.85)'; ctx.fill()
+    }
   }
 }
-function _captureAndSend() {
-  const video = videoEl.value
-  if (!video || !visionWs || visionWs.readyState !== WebSocket.OPEN || video.readyState < 2) return
-  const tmp = document.createElement('canvas'); tmp.width = 320; tmp.height = 240
-  tmp.getContext('2d')!.drawImage(video, 0, 0, 320, 240)
-  visionWs.send(JSON.stringify({ type: 'frame', data: tmp.toDataURL('image/jpeg', 0.7).split(',')[1], width: 320, height: 240 }))
-}
+
 function gestureEmoji(name: string): string {
-  return ({ fist:'✊',open_hand:'🖐',point_up:'☝️',peace:'✌️',ok:'👌',pinch:'🤏',thumbs_up:'👍',swipe_left:'👈',swipe_right:'👉',swipe_up:'👆',swipe_down:'👇' } as Record<string,string>)[name] || '🤚'
+  return ({
+    fist:'✊', open_hand:'🖐', point_up:'☝️', peace:'✌️',
+    ok:'👌', pinch:'🤏', thumbs_up:'👍',
+    swipe_left:'👈', swipe_right:'👉', swipe_up:'👆', swipe_down:'👇'
+  } as Record<string,string>)[name] || '🤚'
 }
 </script>
 
