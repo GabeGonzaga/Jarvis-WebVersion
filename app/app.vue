@@ -1,27 +1,59 @@
-<script setup>
-useHead({
-  meta: [
-    { name: 'viewport', content: 'width=device-width, initial-scale=1' }
-  ],
-  link: [
-    { rel: 'icon', href: '/favicon.ico' }
-  ],
-  htmlAttrs: {
-    lang: 'en'
+<script setup lang="ts">
+import { onMounted, watch } from 'vue'
+
+const themeMode = useState<'system' | 'dark' | 'light'>('ui_theme_mode', () => 'system')
+const language = useState<string>('ui_language', () => 'en-GB')
+
+useHead({ htmlAttrs: { lang: language } })
+
+function resolveTheme(mode: 'system' | 'dark' | 'light'): 'dark' | 'light' {
+  if (!import.meta.client) return 'dark'
+  if (mode === 'dark' || mode === 'light') return mode
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+}
+
+function applyTheme() {
+  if (!import.meta.client) return
+  document.documentElement.dataset.theme = resolveTheme(themeMode.value)
+}
+
+function applyLanguage() {
+  if (!import.meta.client) return
+  document.documentElement.lang = language.value
+}
+
+// Watch OUTSIDE onMounted — this is the fix.
+// Previously the watch was inside onMounted which caused a timing
+// issue: the watcher wasn't registered until after mount, so
+// changes from the <select> could fire before it was alive.
+// { immediate: true } also applies the theme on first render.
+watch(themeMode, (v) => {
+  if (!import.meta.client) return
+  localStorage.setItem('jarvis_theme', v)
+  applyTheme()
+}, { immediate: true })
+
+watch(language, (v) => {
+  if (!import.meta.client) return
+  localStorage.setItem('jarvis_lang', v)
+  applyLanguage()
+}, { immediate: true })
+
+onMounted(() => {
+  // Restore saved preferences from localStorage on first load
+  const savedTheme = localStorage.getItem('jarvis_theme')
+  if (savedTheme === 'system' || savedTheme === 'dark' || savedTheme === 'light') {
+    themeMode.value = savedTheme  // this triggers the watch above
   }
-})
 
-const title = 'Nuxt Starter Template'
-const description = 'A production-ready starter template powered by Nuxt UI. Build beautiful, accessible, and performant applications in minutes, not hours.'
+  const savedLang = localStorage.getItem('jarvis_lang')
+  if (savedLang) language.value = savedLang
 
-useSeoMeta({
-  title,
-  description,
-  ogTitle: title,
-  ogDescription: description,
-  ogImage: 'https://ui.nuxt.com/assets/templates/nuxt/starter-light.png',
-  twitterImage: 'https://ui.nuxt.com/assets/templates/nuxt/starter-light.png',
-  twitterCard: 'summary_large_image'
+  // React to OS-level dark/light changes when in "system" mode
+  const mq = window.matchMedia('(prefers-color-scheme: dark)')
+  const onChange = () => { if (themeMode.value === 'system') applyTheme() }
+  if ('addEventListener' in mq) mq.addEventListener('change', onChange)
+  else (mq as any).addListener(onChange)
 })
 </script>
 

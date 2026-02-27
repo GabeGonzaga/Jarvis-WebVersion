@@ -1,11 +1,166 @@
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
+/* app/assets/css/main.css */
+* { margin: 0; padding: 0; box-sizing: border-box; }
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* DARK (default) */
+:root {
+  color-scheme: dark;
+
+  --accent: #00d4ff;
+
+  --shell-bg:
+    radial-gradient(900px 500px at 20% 10%, rgba(0, 217, 255, 0.18), transparent 60%),
+    radial-gradient(800px 450px at 85% 20%, rgba(0, 120, 255, 0.16), transparent 60%),
+    radial-gradient(700px 400px at 50% 90%, rgba(0, 255, 170, 0.08), transparent 60%),
+    linear-gradient(180deg, #050814 0%, #070b1b 40%, #050814 100%);
+  --shell-fg: rgba(235, 245, 255, 0.92);
+  --grid-line: rgba(0, 217, 255, 0.10);
+
+  --topbar-bg: rgba(7, 14, 36, 0.65);
+  --topbar-border: rgba(0, 217, 255, 0.25);
+
+  --logo-border: rgba(0, 217, 255, 0.35);
+  --logo-bg:
+    radial-gradient(circle at 30% 30%, rgba(0, 217, 255, 0.8), rgba(0, 217, 255, 0.05) 60%),
+    linear-gradient(135deg, rgba(0, 217, 255, 0.15), rgba(0, 140, 255, 0.05));
+  --logo-shadow: 0 0 22px rgba(0, 217, 255, 0.25);
+
+  --title-fg: rgba(150, 240, 255, 0.95);
+  --subtitle-fg: rgba(235, 245, 255, 0.72);
+
+  --pill-border: rgba(0, 217, 255, 0.25);
+  --pill-bg: rgba(0, 217, 255, 0.08);
+
+  --cam-border: rgba(0, 217, 255, 0.22);
+  --cam-bg: rgba(0, 217, 255, 0.06);
+  --cam-fg: rgba(0, 212, 255, 0.60);
+
+  --panel-bg: rgba(6, 12, 30, 0.62);
+  --panel-border: rgba(0, 217, 255, 0.22);
+  --panel-head-bg: linear-gradient(180deg, rgba(0, 217, 255, 0.06), transparent);
+  --panel-head-border: rgba(0, 217, 255, 0.14);
+  --panel-title-fg: rgba(170, 245, 255, 0.95);
+
+  --camera-panel-bg: rgba(6, 12, 30, 0.75);
+
+  --qbtn-bg: rgba(0, 217, 255, 0.06);
+  --qbtn-border: rgba(0, 217, 255, 0.22);
+  --qbtn-fg: rgba(200, 250, 255, 0.92);
+  --qbtn-hover-bg: rgba(0, 217, 255, 0.10);
+
+  --control-bg: rgba(0, 217, 255, 0.06);
+  --control-border: rgba(0, 217, 255, 0.22);
+  --control-fg: rgba(200, 250, 255, 0.92);
+  --control-chevron: rgba(200, 250, 255, 0.85);
+  --control-focus: rgba(0, 212, 255, 0.22);
+
+  --frame-bg: rgba(8, 16, 40, 0.65);
+  --frame-border: rgba(0, 217, 255, 0.18);
+  --frame-user-bg: linear-gradient(135deg, rgba(0, 217, 255, 0.24), rgba(0, 140, 255, 0.10));
+  --frame-user-border: rgba(0, 217, 255, 0.26);
+
+  --meta-fg: rgba(170, 245, 255, 0.95);
+
+  --via-bg: rgba(0, 212, 255, 0.12);
+  --via-border: rgba(0, 212, 255, 0.25);
+  --via-fg: rgba(0, 212, 255, 0.80);
+
+  --scrollbar-thumb: rgba(0, 217, 255, 0.18);
+  --scrollbar-thumb-border: rgba(0, 217, 255, 0.22);
+
+  --composer-bg: linear-gradient(180deg, transparent, rgba(0, 217, 255, 0.05));
+  --input-bg: rgba(6, 12, 30, 0.65);
+  --input-border: rgba(0, 217, 255, 0.22);
+  --input-fg: rgba(235, 245, 255, 0.92);
+  --placeholder-fg: rgba(155, 185, 210, 0.65);
+
+  --voice-btn-bg: rgba(0, 16, 26, 0.80);
+  --voice-btn-border: rgba(0, 212, 255, 0.30);
+  --voice-btn-fg: rgba(0, 212, 255, 0.70);
+
+  --send-bg: linear-gradient(135deg, rgba(0, 217, 255, 0.25), rgba(0, 140, 255, 0.10));
+  --send-border: rgba(0, 217, 255, 0.35);
+  --send-fg: rgba(200, 250, 255, 0.95);
+  --send-ico-border: rgba(0, 217, 255, 0.55);
+}
+
+/* LIGHT (blueprint) */
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  --shell-bg: linear-gradient(180deg, #0b84c8 0%, #0b84c8 100%);
+  --shell-fg: rgba(255, 255, 255, 0.92);
+  --grid-line: rgba(255, 255, 255, 0.14);
+
+  --topbar-bg: rgba(0, 16, 30, 0.18);
+  --topbar-border: rgba(255, 255, 255, 0.16);
+
+  --logo-border: rgba(255, 255, 255, 0.20);
+  --logo-bg:
+    radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.05) 60%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.14), rgba(0, 0, 0, 0));
+  --logo-shadow: 0 0 18px rgba(0, 0, 0, 0.18);
+
+  --title-fg: rgba(255, 255, 255, 0.95);
+  --subtitle-fg: rgba(255, 255, 255, 0.72);
+
+  --pill-border: rgba(255, 255, 255, 0.16);
+  --pill-bg: rgba(255, 255, 255, 0.10);
+
+  --cam-border: rgba(255, 255, 255, 0.16);
+  --cam-bg: rgba(255, 255, 255, 0.08);
+  --cam-fg: rgba(255, 255, 255, 0.90);
+
+  --panel-bg: rgba(0, 16, 30, 0.18);
+  --panel-border: rgba(255, 255, 255, 0.14);
+  --panel-head-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent);
+  --panel-head-border: rgba(255, 255, 255, 0.12);
+  --panel-title-fg: rgba(255, 255, 255, 0.92);
+
+  --camera-panel-bg: rgba(0, 16, 30, 0.22);
+
+  --qbtn-bg: rgba(255, 255, 255, 0.08);
+  --qbtn-border: rgba(255, 255, 255, 0.14);
+  --qbtn-fg: rgba(255, 255, 255, 0.92);
+  --qbtn-hover-bg: rgba(255, 255, 255, 0.12);
+
+  --control-bg: rgba(255, 255, 255, 0.08);
+  --control-border: rgba(255, 255, 255, 0.14);
+  --control-fg: rgba(255, 255, 255, 0.92);
+  --control-chevron: rgba(255, 255, 255, 0.82);
+  --control-focus: rgba(255, 255, 255, 0.18);
+
+  --frame-bg: rgba(0, 16, 30, 0.18);
+  --frame-border: rgba(255, 255, 255, 0.12);
+  --frame-user-bg: rgba(255, 255, 255, 0.10);
+  --frame-user-border: rgba(255, 255, 255, 0.16);
+
+  --meta-fg: rgba(255, 255, 255, 0.92);
+
+  --via-bg: rgba(255, 255, 255, 0.10);
+  --via-border: rgba(255, 255, 255, 0.14);
+  --via-fg: rgba(255, 255, 255, 0.92);
+
+  --scrollbar-thumb: rgba(255, 255, 255, 0.16);
+  --scrollbar-thumb-border: rgba(255, 255, 255, 0.14);
+
+  --composer-bg: linear-gradient(180deg, transparent, rgba(255, 255, 255, 0.08));
+  --input-bg: rgba(0, 16, 30, 0.18);
+  --input-border: rgba(255, 255, 255, 0.14);
+  --input-fg: rgba(255, 255, 255, 0.92);
+  --placeholder-fg: rgba(255, 255, 255, 0.62);
+
+  --voice-btn-bg: rgba(0, 16, 30, 0.22);
+  --voice-btn-border: rgba(255, 255, 255, 0.18);
+  --voice-btn-fg: rgba(255, 255, 255, 0.90);
+
+  --send-bg: rgba(255, 255, 255, 0.12);
+  --send-border: rgba(255, 255, 255, 0.18);
+  --send-fg: rgba(255, 255, 255, 0.95);
+  --send-ico-border: rgba(255, 255, 255, 0.30);
 }
