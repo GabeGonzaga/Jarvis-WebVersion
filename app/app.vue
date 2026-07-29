@@ -52,8 +52,7 @@ onMounted(() => {
   // React to OS-level dark/light changes when in "system" mode
   const mq = window.matchMedia('(prefers-color-scheme: dark)')
   const onChange = () => { if (themeMode.value === 'system') applyTheme() }
-  if ('addEventListener' in mq) mq.addEventListener('change', onChange)
-  else (mq as any).addListener(onChange)
+  mq.addEventListener('change', onChange)
 })
 </script>
 
