@@ -122,5 +122,11 @@ export function useWindows() {
     if (w) { w.min = false; bringFront(id) }
   }
 
-  return { windows, openWindow, closeWindow, minimise, restore, bringFront }
+  /** Update a window's geometry from the store (avoids mutating component props). */
+  function setBounds(id: number, patch: Partial<Pick<JWindow, 'x' | 'y' | 'w' | 'h'>>) {
+    const w = windows.value.find(x => x.id === id)
+    if (w) Object.assign(w, patch)
+  }
+
+  return { windows, openWindow, closeWindow, minimise, restore, bringFront, setBounds }
 }

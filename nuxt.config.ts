@@ -1,6 +1,10 @@
 export default defineNuxtConfig({
   srcDir: 'app/',
 
+  // Registers @nuxt/eslint so `nuxt prepare` generates .nuxt/eslint.config.mjs,
+  // which eslint.config.mjs imports. Without this, `pnpm lint` cannot resolve it.
+  modules: ['@nuxt/eslint'],
+
   // Disable SSR — local desktop app, not a public website.
   // Prevents crashes when browser APIs are accessed during server render.
   ssr: false,

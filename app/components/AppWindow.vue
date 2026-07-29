@@ -78,10 +78,12 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { openExternal, type JWindow } from '~/composables/useWindows'
+import { openExternal, useWindows, type JWindow } from '~/composables/useWindows'
 
 const props = defineProps<{ win: JWindow; focused: boolean }>()
 defineEmits<{ close: [id: number]; minimise: [id: number]; focus: [id: number] }>()
+
+const { setBounds } = useWindows()
 
 const ICONS: Record<string, string> = { pinterest: '📌', youtube: '▶️', music: '🎵', notes: '📝', google: '🔎' }
 const icon = computed(() => ICONS[props.win.type] || '🌐')
@@ -108,8 +110,10 @@ function startDrag(e: PointerEvent) {
 }
 function onDrag(e: PointerEvent) {
   if (!dragging) return
-  props.win.x = Math.max(0, Math.min(window.innerWidth - 80, e.clientX - ox))
-  props.win.y = Math.max(0, Math.min(window.innerHeight - 40, e.clientY - oy))
+  setBounds(props.win.id, {
+    x: Math.max(0, Math.min(window.innerWidth - 80, e.clientX - ox)),
+    y: Math.max(0, Math.min(window.innerHeight - 40, e.clientY - oy))
+  })
 }
 function endDrag() { dragging = false }
 
@@ -122,8 +126,10 @@ function startResize(e: PointerEvent) {
 }
 function onResize(e: PointerEvent) {
   if (!rzing) return
-  props.win.w = Math.max(280, sw + e.clientX - sx)
-  props.win.h = Math.max(200, sh + e.clientY - sy)
+  setBounds(props.win.id, {
+    w: Math.max(280, sw + e.clientX - sx),
+    h: Math.max(200, sh + e.clientY - sy)
+  })
 }
 function endResize() { rzing = false }
 </script>
